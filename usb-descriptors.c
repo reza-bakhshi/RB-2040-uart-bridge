@@ -76,7 +76,8 @@ static const uint8_t usbd_desc_cfg[USBD_DESC_LEN] = {
 static char usbd_serial[USBD_STR_SERIAL_LEN] = "000000000000";
 
 static const char *const usbd_desc_str[] = {
-	[USBD_STR_PRODUCT] = "Ryoiki",
+	[USBD_STR_MANUF] = "Reza Bakhshi",
+	[USBD_STR_PRODUCT] = "RB-2040-uart-bridge",
 	[USBD_STR_SERIAL] = usbd_serial,
 	[USBD_STR_CDC] = "Board CDC",
 };
@@ -88,6 +89,8 @@ const uint8_t *tud_descriptor_device_cb(void)
 
 const uint8_t *tud_descriptor_configuration_cb(uint8_t index)
 {
+	(void) index;
+
 	return usbd_desc_cfg;
 }
 
@@ -96,17 +99,21 @@ const uint16_t *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
 	static uint16_t desc_str[DESC_STR_MAX];
 	uint8_t len;
 
+	(void) langid;
+
 	if (index == 0) {
 		desc_str[1] = 0x0409;
 		len = 1;
 	} else {
 		const char *str;
-		char serial[USBD_STR_SERIAL_LEN];
 
 		if (index >= sizeof(usbd_desc_str) / sizeof(usbd_desc_str[0]))
 			return NULL;
 
 		str = usbd_desc_str[index];
+		if (!str)
+			str = "";
+
 		for (len = 0; len < DESC_STR_MAX - 1 && str[len]; ++len)
 			desc_str[1 + len] = str[len];
 	}

@@ -1,4 +1,4 @@
-name: pico-uart-bridge
+name: RB-2040-uart-bridge
 
 on:
   - push
@@ -41,6 +41,8 @@ jobs:
       - name: 'Upload binary'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.board }}-uart-bridge.uf2
-          path: build/uart_bridge.uf2
+          name: ${{ matrix.board }}-RB-2040-uart-bridge
+          path: |
+            build/RB-2040-uart-bridge-GP12-13.uf2
+            build/RB-2040-uart-bridge-GP16-17.uf2
           retention-days: 5

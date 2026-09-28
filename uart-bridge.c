@@ -22,6 +22,22 @@
 #define DEF_PARITY 0
 #define DEF_DATA_BITS 8
 
+/*
+ * UART0 pin pair is selected at build time:
+ *   GP12/GP13 -> RB-2040 (current board, default)
+ *   GP16/GP17 -> older module
+ * UART1 stays on GP8/GP9 for both.
+ */
+#ifndef UART0_TX_PIN
+#define UART0_TX_PIN 12
+#endif
+#ifndef UART0_RX_PIN
+#define UART0_RX_PIN 13
+#endif
+
+#define UART1_TX_PIN 8
+#define UART1_RX_PIN 9
+
 typedef struct {
 	uart_inst_t *const inst;
 	uint irq;
@@ -50,14 +66,14 @@ const uart_id_t UART_ID[CFG_TUD_CDC] = {
 		.inst = uart0,
 		.irq = UART0_IRQ,
 		.irq_fn = &uart0_irq_fn,
-		.tx_pin = 16,
-		.rx_pin = 17,
+		.tx_pin = UART0_TX_PIN,
+		.rx_pin = UART0_RX_PIN,
 	}, {
 		.inst = uart1,
 		.irq = UART1_IRQ,
 		.irq_fn = &uart1_irq_fn,
-		.tx_pin = 8,
-		.rx_pin = 9,
+		.tx_pin = UART1_TX_PIN,
+		.rx_pin = UART1_RX_PIN,
 	}
 };
 
@@ -184,15 +200,18 @@ void core1_entry(void)
 
 	while (1) {
 		int itf;
-		int con = 0;
 
 		tud_task();
 
-		for (itf = 0; itf < CFG_TUD_CDC; itf++) {
-			if (tud_cdc_n_connected(itf)) {
-				con = 1;
+		/*
+		 * Do NOT gate on tud_cdc_n_connected(): it only returns true once
+		 * the host asserts DTR, and plenty of serial tools/OS combinations
+		 * never do. When that happens the bridge enumerates but is dead on
+		 * both ports. Once USB is configured, service every interface.
+		 */
+		if (tud_ready()) {
+			for (itf = 0; itf < CFG_TUD_CDC; itf++)
 				usb_cdc_process(itf);
-			}
 		}
 	}
 }
@@ -202,17 +221,36 @@ static inline void uart_read_bytes(uint8_t itf)
 	uart_data_t *ud = &UART_DATA[itf];
 	const uart_id_t *ui = &UART_ID[itf];
 
-	if (uart_is_readable(ui->inst)) {
-		mutex_enter_blocking(&ud->uart_mtx);
+	if (!uart_is_readable(ui->inst))
+		return;
 
-		while (uart_is_readable(ui->inst) &&
-		       (ud->uart_pos < BUFFER_SIZE)) {
-			ud->uart_buffer[ud->uart_pos] = uart_getc(ui->inst);
-			ud->uart_pos++;
-		}
-
-		mutex_exit(&ud->uart_mtx);
+	/*
+	 * Runs in the IRQ handler, so never block and never return with bytes
+	 * left in the FIFO.
+	 *
+	 * Blocking on uart_mtx hangs the bridge: core1 holds it while writing
+	 * to USB, and that write stalls when the host is not reading. Leaving
+	 * data in the FIFO keeps the RX interrupt asserted, so the handler just
+	 * fires again and gets nowhere.
+	 *
+	 * Either way USB stays enumerated while no data moves, and only a
+	 * replug recovers it.
+	 */
+	if (!mutex_try_enter(&ud->uart_mtx, NULL)) {
+		while (uart_is_readable(ui->inst))
+			(void)uart_getc(ui->inst);
+		return;
 	}
+
+	while (uart_is_readable(ui->inst)) {
+		const uint8_t ch = uart_getc(ui->inst);
+
+		if (ud->uart_pos < BUFFER_SIZE)
+			ud->uart_buffer[ud->uart_pos++] = ch;
+		/* Host is not keeping up. Drop it rather than hang. */
+	}
+
+	mutex_exit(&ud->uart_mtx);
 }
 
 void uart0_irq_fn(void)
