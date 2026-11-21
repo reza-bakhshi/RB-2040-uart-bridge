@@ -1,5 +1,4 @@
-RB-2040 UART Bridge
-====================
+# RB-2040 UART Bridge
 
 A USB-to-UART bridge firmware for the Raspberry Pi Pico (RP2040) and Pico 2
 (RP2350). It exposes both hardware UARTs as two independent USB CDC-ACM serial
@@ -8,8 +7,7 @@ ports, so a single board behaves like two USB-to-UART adapters at once.
 Based on [pico-uart-bridge](https://github.com/Noltari/pico-uart-bridge) by
 Álvaro Fernández Rojas.
 
-Suggested Hardware
-------------------
+## Suggested Hardware
 
 This firmware is designed and tested for the
 [**RB-2040**](https://github.com/reza-bakhshi/RB-2040), a compact USB-dongle-style
@@ -28,8 +26,7 @@ RP2040 development board.
 
 The firmware also runs on a standard Raspberry Pi Pico or Pico 2.
 
-Features
---------
+## Features
 
 - Two independent USB CDC serial ports, one per hardware UART.
 - Line settings (baud rate, data bits, parity, stop bits) configurable by the
@@ -38,14 +35,17 @@ Features
 - USB serial number derived from the flash unique ID, so each board gets a
   stable and unique identity.
 - Non-blocking UART RX interrupt handler: the bridge always drains the RX FIFO
-  and never blocks on a mutex, so it cannot hang when nothing is reading the
-  port. If the host cannot keep up, excess bytes are dropped.
+  and avoids blocking on a mutex, preventing the observed mutex-related stall
+  when the host is not reading the port. If the host cannot keep up, excess bytes are dropped.
 - Ignores host DTR: data flows as soon as a port is opened, even with tools that
   never assert DTR.
 - Builds for both Pico 1 (RP2040) and Pico 2 (RP2350).
 
-UART Pinout
------------
+## Connect a target
+
+Cross the bridge TX to the target RX and bridge RX to target TX, and connect a common ground. Use 3.3 V UART logic; the RP2040 GPIOs are not 5 V tolerant. Power the target appropriately rather than treating the bridge as a level converter.
+
+## UART Pinout
 
 Two firmware variants are built. They differ only in the UART0 pin pair; UART1
 is GP8/GP9 in both.
@@ -70,8 +70,7 @@ Firmware images:
 The TX and RX pins are configured with internal pull-ups to keep floating inputs
 from generating noise that looks like received data.
 
-USB Identity
-------------
+## USB Identity
 
 | Field     | Value                                        |
 |:---------:|:--------------------------------------------|
@@ -84,21 +83,20 @@ Hardware flow control (RTS/CTS) is not implemented. DTR and RTS are not used to
 gate data: the bridge starts passing bytes as soon as the port is open, even if
 the host never asserts DTR.
 
-Requirements
-------------
+## Requirements
 
 - CMake 3.13 or newer
 - ARM GCC toolchain (`arm-none-eabi-gcc`)
 - Python 3
 - Git
 
-Building
---------
+## Building
 
-1. Fetch the submodules (only needed once):
+1. Clone the project and fetch its SDK submodule:
 
    ```sh
-   git submodule update --init --recursive
+   git clone --recurse-submodules https://github.com/reza-bakhshi/RB-2040-uart-bridge.git
+   cd RB-2040-uart-bridge
    ```
 
 2. Build for the Pico 1 (default):
@@ -127,11 +125,10 @@ cmake -B build/pico -DPICO_BOARD=pico
 make -C build/pico
 ```
 
-Flashing
---------
+## Flashing
 
-1. Hold the **BOOTSEL** button while plugging the board into USB. It appears as
-   a mass-storage device named `RPI-RP2`.
+1. Hold **BOOTSEL** while plugging the board into USB. On RP2040 it appears as
+   `RPI-RP2`; on RP2350 it appears as `RP2350`.
 2. Copy the image that matches your board (for the RB-2040, use
    `RB-2040-uart-bridge-GP12-13.uf2`) onto that drive.
 3. The board reboots automatically and two serial ports appear.
@@ -142,11 +139,11 @@ Alternatively, with `picotool`:
 picotool load -f build/pico/RB-2040-uart-bridge-GP12-13.uf2
 ```
 
-Usage
------
+## Usage
 
-- **Linux / macOS:** `ttyACM0` and `ttyACM1` (the order may vary; use the USB
-  serial number or `/dev/serial/by-id/` to tell them apart).
+- **Linux:** typically `/dev/ttyACM0` and `/dev/ttyACM1`; numbering varies. Use
+  `/dev/serial/by-id/` to identify the board.
+- **macOS:** typically `/dev/cu.usbmodem*`; names vary.
 - **Windows:** two COM ports.
 
 Open either port with a terminal and set the desired baud rate there, for
@@ -158,8 +155,7 @@ screen /dev/ttyACM0 115200
 
 The line coding selected by the host is applied to the corresponding UART.
 
-Troubleshooting
----------------
+## Troubleshooting
 
 - **Port appears but no data flows in either direction.** Older firmware only
   serviced an interface after the host asserted DTR, so tools that never raise
@@ -177,8 +173,7 @@ Troubleshooting
   if no program is reading the port or the host cannot keep up. Keep the
   terminal open and avoid heavy USB contention.
 
-Architecture
-------------
+## Architecture
 
 - **Core 0:** applies host line coding to the UART and moves data from the USB
   buffer out to the UART.
@@ -187,8 +182,7 @@ Architecture
 - **UART RX interrupt:** drains the RX FIFO into the per-port buffer without
   ever blocking.
 
-Credits and License
--------------------
+## Credits and License
 
 Originally created by Álvaro Fernández Rojas and released under the MIT License.
 This fork is maintained by Reza Bakhshi. It bundles TinyUSB and the Raspberry Pi
